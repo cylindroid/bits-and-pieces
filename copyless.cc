@@ -161,7 +161,7 @@ class CompositeSequence
                 ((seq_id == std::tuple_element<Indexes, ComponentTuple>::type::TypeId) ?
                     (std::get<Indexes>(_components).process(
                         static_cast<typename std::tuple_element<Indexes, ComponentTuple>::type::OpcodeType>(
-                            static_cast<OpcodeBase>(opcode))), 0) : 0)...
+                            opcode)), 0) : 0)...
             };
         }
         std::tuple<Elements...> _components;

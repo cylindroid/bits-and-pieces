@@ -6,7 +6,6 @@
 #include <memory>
 #include <utility>
 
-
 using SequenceIdType = uint32_t;
 using CompositeSequenceTypeFlag = uint64_t;
 using SequenceOpcodeBase = uint32_t;
@@ -43,17 +42,37 @@ template <SequenceId S, typename Opcode>
 class Sequence
 {
     public:
-        static_assert(std::is_enum<Opcode>::value, "template argument 2 of Sequence must be enum type");
+        static_assert(std::is_enum<Opcode>::value, "template argument 2 of Sequence must be of enum class type");
         static_assert(std::is_same<SequenceOpcodeBase, typename std::underlying_type<Opcode>::type>::value, "template argument 2 of Sequence class must be based on SequenceOpcodeBase type");
-        using Id = SequenceId;
+        using IdType = SequenceId;
         using BaseType = Sequence<S, Opcode>;
         using OpcodeType = Opcode;
-        static constexpr Id TypeId = S;
+        static constexpr IdType Id = S;
         Sequence(Transaction& trans) : _trans(trans) {}
 
         virtual void process(const Opcode op) = 0;
     protected:
         Transaction& _trans;
+};
+
+template <typename T>
+struct SequenceAsCompositeSequenceTypeFlag
+{
+    static_assert(std::is_base_of<Sequence<T::Id, typename T::OpcodeType>, T>::value, "Composite sequences takes only Sequence instance as argument");
+    static_assert(static_cast<SequenceIdType>(T::Id) < sizeof(uint64_t) * 8, "SequenceId cannot exceed range [0, 64)");
+    static constexpr CompositeSequenceTypeFlag value = (1ull << static_cast<SequenceIdType>(T::Id));
+};
+
+template <typename ...>
+struct CompositeSequenceFlag
+{
+    static constexpr CompositeSequenceTypeFlag value = 0;
+};
+
+template <class Head, class ... Tails>
+struct CompositeSequenceFlag<Head, Tails...>
+{
+    static constexpr CompositeSequenceTypeFlag value = SequenceAsCompositeSequenceTypeFlag<Head>::value | CompositeSequenceFlag<Tails...>::value;
 };
 
 class E : public Sequence<SequenceId::E, EOps>
@@ -97,40 +116,6 @@ class F : public Sequence<SequenceId::F, FOps>
         unsigned _u;
 };
 
-
-template <class One>
-constexpr CompositeSequenceTypeFlag SequenceIdAsFlag()
-{
-    static_assert(static_cast<SequenceIdType>(One::TypeId) < (sizeof(uint64_t) * 8), "Out-of-bounds sequence Id - valid range: [0, 64)");
-    return (1ull << static_cast<SequenceIdType>(One::TypeId));
-}
-
-template <class ... Elements>
-constexpr CompositeSequenceTypeFlag SequenceIdOr()
-{
-    std::initializer_list<CompositeSequenceTypeFlag> list { SequenceIdAsFlag<Elements>()... };
-    CompositeSequenceTypeFlag ret = 0;
-    for (CompositeSequenceTypeFlag x : list)
-    {
-        //static_assert((ret & x) == 0, "Template sequence arguments must not have duplicates");
-        //static_assert(ret < x, "Template arguments of composite sequence must be in increasing sequence id order");
-        ret |= x;
-    }
-    return ret;
-}
-
-template <class ... Elements>
-constexpr size_t AggregateSizeInBytes()
-{
-    std::initializer_list<size_t> list { sizeof(Elements)... };
-    size_t ret = 0;
-    for (size_t x : list)
-    {
-        ret += x;
-    }
-    return ret;
-}
-
 template <class ... Elements>
 class CompositeSequence
 {
@@ -139,7 +124,7 @@ class CompositeSequence
         CompositeSequence(Transaction& trans)
             : _components(make_tuple((void(sizeof(Elements)), std::ref(trans))...))
         {}
-        static constexpr CompositeSequenceTypeFlag composition_flag = SequenceIdOr<Elements...>();
+        static constexpr CompositeSequenceTypeFlag composition_flag = CompositeSequenceFlag<Elements...>::value;
         static constexpr uint32_t num_sequences = sizeof...(Elements);
         static bool isComponent(SequenceId seq_id)
         {
@@ -159,7 +144,7 @@ class CompositeSequence
         void runImpl(SequenceId seq_id, const Opcode opcode, std::index_sequence<Indexes...>)
         {
             std::initializer_list<int> list {
-                ((seq_id == std::tuple_element<Indexes, ComponentTuple>::type::TypeId) ?
+                ((seq_id == std::tuple_element<Indexes, ComponentTuple>::type::Id) ?
                     (std::get<Indexes>(_components).process(
                         static_cast<typename std::tuple_element<Indexes, ComponentTuple>::type::OpcodeType>(
                             opcode)), 0) : 0)...

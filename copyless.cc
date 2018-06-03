@@ -9,7 +9,7 @@
 
 using SequenceIdType = uint32_t;
 using CompositeSequenceTypeFlag = uint64_t;
-using SequenceOpCode = uint32_t;
+using SequenceOpcodeBase = uint32_t;
 
 class Transaction
 {
@@ -26,15 +26,14 @@ enum class SequenceId : SequenceIdType
     Max
 };
 
-using OpcodeBase = uint32_t;
 
-enum class EOps : OpcodeBase
+enum class EOps : SequenceOpcodeBase
 {
     RunA,
     RunB
 };
 
-enum class FOps : OpcodeBase
+enum class FOps : SequenceOpcodeBase
 {
     RunX,
     RunY
@@ -44,6 +43,8 @@ template <SequenceId S, typename Opcode>
 class Sequence
 {
     public:
+        static_assert(std::is_enum<Opcode>::value, "template argument 2 of Sequence must be enum type");
+        static_assert(std::is_same<SequenceOpcodeBase, typename std::underlying_type<Opcode>::type>::value, "template argument 2 of Sequence class must be based on SequenceOpcodeBase type");
         using Id = SequenceId;
         using BaseType = Sequence<S, Opcode>;
         using OpcodeType = Opcode;

@@ -72,7 +72,11 @@ struct CompositeSequenceFlag
 template <class Head, class ... Tails>
 struct CompositeSequenceFlag<Head, Tails...>
 {
-    static constexpr CompositeSequenceTypeFlag value = SequenceAsCompositeSequenceTypeFlag<Head>::value | CompositeSequenceFlag<Tails...>::value;
+    static constexpr CompositeSequenceTypeFlag head = SequenceAsCompositeSequenceTypeFlag<Head>::value;
+    static constexpr CompositeSequenceTypeFlag tails = CompositeSequenceFlag<Tails...>::value;
+    static_assert(tails == 0 || (tails > 0 && (head & tails) == 0), "No duplicate sequences allowed in component");
+    static_assert(tails == 0 || (tails > 0 && head < tails), "Template argument for sequences must be passed in increasing SequenceId order");
+    static constexpr CompositeSequenceTypeFlag value = head | tails;
 };
 
 class E : public Sequence<SequenceId::E, EOps>

@@ -82,7 +82,7 @@ struct CompositeSequenceFlag<Head, Tails...>
 class E : public Sequence<SequenceId::E, EOps>
 {
     public:
-        E(Transaction& trans) : BaseType(trans), _x(10), _y("abc") {}
+        E(Transaction& trans) : BaseType(trans), _x(10), _y("abc") { fprintf(stderr, "&E == %p\n", this); }
         virtual void process(const EOps op) override final
         {
             if (op == EOps::RunA)
@@ -143,6 +143,18 @@ class CompositeSequence
                 runImpl(seq_id, opcode, std::index_sequence_for<Elements...>{});
             }
         }
+
+        template <typename Component>
+        Component& get()
+        {
+            return std::get<Component>(_components);
+        }
+
+        template <typename Component>
+        const Component & get() const
+        {
+            return std::get<Component>(_components);
+        }
     private:
         template <typename Opcode, size_t ... Indexes>
         void runImpl(SequenceId seq_id, const Opcode opcode, std::index_sequence<Indexes...>)
@@ -170,5 +182,8 @@ int main()
     //printf("size of shared_ptr<F>: %lu\n", sizeof(std::shared_ptr<F>));
     printf("size of Composite<E, F>: %lu\n", sizeof(TestSequence));
     cont.run(SequenceId::E, EOps::RunB);
+    E& e = cont.get<E>();
+    const E& e_const = cont.get<E>();
+    printf("Post-ctor E locations: %p, %p (const)\n", &e, &e_const);
     return 0;
 }

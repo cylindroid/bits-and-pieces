@@ -25,7 +25,6 @@ enum class SequenceId : SequenceIdType
     Max
 };
 
-
 enum class EOps : SequenceOpcodeBase
 {
     RunA,
@@ -79,6 +78,13 @@ struct CompositeSequenceFlag<Head, Tails...>
     static constexpr CompositeSequenceTypeFlag value = head | tails;
 };
 
+template <SequenceId seq>
+struct FlagFromSequenceId
+{
+    static_assert(static_cast<SequenceIdType>(seq) < sizeof(uint64_t) * 8, "SequenceId cannot exceed range [0, 64)");
+    static constexpr CompositeSequenceTypeFlag value = (1ull << static_cast<SequenceIdType>(seq));
+};
+
 class E : public Sequence<SequenceId::E, EOps>
 {
     public:
@@ -120,6 +126,22 @@ class F : public Sequence<SequenceId::F, FOps>
         unsigned _u;
 };
 
+template <SequenceId seqId>
+struct SequenceIdTag
+{
+};
+
+template <SequenceId seqId, typename S, typename Opcode>
+typename std::enable_if<seqId == S::Id, void>::type runMatchingSequence(SequenceIdTag<seqId>, S& seq, Opcode opcode)
+{
+    seq.process(opcode);
+}
+
+template <SequenceId seqId, typename S, typename Opcode>
+typename std::enable_if<seqId != S::Id, void>::type runMatchingSequence(SequenceIdTag<seqId>, S& seq, Opcode opcode)
+{
+}
+
 template <class ... Elements>
 class CompositeSequence
 {
@@ -130,17 +152,19 @@ class CompositeSequence
         {}
         static constexpr CompositeSequenceTypeFlag composition_flag = CompositeSequenceFlag<Elements...>::value;
         static constexpr uint32_t num_sequences = sizeof...(Elements);
-        static bool isComponent(SequenceId seq_id)
+
+        template<SequenceId seqId>
+        static constexpr bool isComponent()
         {
-            return (composition_flag & (1ull << static_cast<SequenceIdType>(seq_id))) != 0;
+            return (composition_flag & FlagFromSequenceId<seqId>::value) != 0;
         }
 
-        template <typename Opcode>
-        void run(SequenceId seq_id, const Opcode opcode)
+        template <SequenceId seqId, typename Opcode>
+        void run(const Opcode opcode)
         {
-            if (isComponent(seq_id))
+            if (isComponent<seqId>())
             {
-                runImpl(seq_id, opcode, std::index_sequence_for<Elements...>{});
+                runImpl(SequenceIdTag<seqId> {}, opcode, std::index_sequence_for<Elements...> {});
             }
         }
 
@@ -156,14 +180,13 @@ class CompositeSequence
             return std::get<Component>(_components);
         }
     private:
-        template <typename Opcode, size_t ... Indexes>
-        void runImpl(SequenceId seq_id, const Opcode opcode, std::index_sequence<Indexes...>)
+        template <SequenceId seqId, typename Opcode, size_t ... Indexes>
+        void runImpl(SequenceIdTag<seqId>, const Opcode opcode, std::index_sequence<Indexes...>)
         {
-            std::initializer_list<int> list {
-                ((seq_id == std::tuple_element<Indexes, ComponentTuple>::type::Id) ?
-                    (std::get<Indexes>(_components).process(
-                        static_cast<typename std::tuple_element<Indexes, ComponentTuple>::type::OpcodeType>(
-                            opcode)), 0) : 0)...
+            using expander = int[];
+            (void) expander { (
+                    runMatchingSequence(SequenceIdTag<seqId> {}, std::get<Indexes>(_components), opcode)
+                , 0)...
             };
         }
         std::tuple<Elements...> _components;
@@ -181,7 +204,7 @@ int main()
     //printf("size of shared_ptr<E>: %lu\n", sizeof(std::shared_ptr<E>));
     //printf("size of shared_ptr<F>: %lu\n", sizeof(std::shared_ptr<F>));
     printf("size of Composite<E, F>: %lu\n", sizeof(TestSequence));
-    cont.run(SequenceId::E, EOps::RunB);
+    cont.run<SequenceId::E, EOps>(EOps::RunB);
     E& e = cont.get<E>();
     const E& e_const = cont.get<E>();
     printf("Post-ctor E locations: %p, %p (const)\n", &e, &e_const);

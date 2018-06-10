@@ -208,5 +208,9 @@ int main()
     E& e = cont.get<E>();
     const E& e_const = cont.get<E>();
     printf("Post-ctor E locations: %p, %p (const)\n", &e, &e_const);
+
+    using JustE = CompositeSequence<E>;
+    JustE eCompSeq(testtrans);
+    eCompSeq.run<SequenceId::F, FOps>(FOps::RunX);
     return 0;
 }

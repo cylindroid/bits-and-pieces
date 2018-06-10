@@ -134,6 +134,7 @@ struct SequenceIdTag
 template <SequenceId seqId, typename S, typename Opcode>
 typename std::enable_if<seqId == S::Id, void>::type runMatchingSequence(SequenceIdTag<seqId>, S& seq, Opcode opcode)
 {
+    static_assert(std::is_same<typename S::OpcodeType, Opcode>::value, "SequenceId must match corresponding Opcode");
     seq.process(opcode);
 }
 
@@ -205,12 +206,15 @@ int main()
     //printf("size of shared_ptr<F>: %lu\n", sizeof(std::shared_ptr<F>));
     printf("size of Composite<E, F>: %lu\n", sizeof(TestSequence));
     cont.run<SequenceId::E, EOps>(EOps::RunB);
+    //cont.run<SequenceId::F, EOps>(EOps::RunA); // Will fail static_assert check because Sequence F expects FOps
     E& e = cont.get<E>();
     const E& e_const = cont.get<E>();
     printf("Post-ctor E locations: %p, %p (const)\n", &e, &e_const);
 
     using JustE = CompositeSequence<E>;
     JustE eCompSeq(testtrans);
-    eCompSeq.run<SequenceId::F, FOps>(FOps::RunX);
+    eCompSeq.run<SequenceId::E, EOps>(EOps::RunA);
+    eCompSeq.run<SequenceId::F, EOps>(EOps::RunA); /* No way to check for this here because F is not part of this CompSeq
+                                                      However, if any code in project uses F with this statement, it will fail to compile */
     return 0;
 }
